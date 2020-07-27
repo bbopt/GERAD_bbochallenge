@@ -12,10 +12,8 @@ def bb(x):
     t1 = int(x.get_coord(2))
     v1 = x.get_coord(3)
     
-    if (t0 <= 2):
-        v[t0] = v0
-    if (t1 <= 2):
-        v[t1] = v1
+    v[t0] = v0
+    v[t1] = v1
     
     if v0 < vmin:
         vmin = v0
@@ -52,7 +50,7 @@ x0 = [0,100,1,100]
 lb = []
 ub=[]
 
-params = ['BB_INPUT_TYPE (C R C R)','NEIGHBORS_EXE "$python ./neighbors.py"','BB_OUTPUT_TYPE EB EB OBJ','MAX_BB_EVAL 500','F_TARGET 0.0','LOWER_BOUND ( - 0.0 - 0.0 )','UPPER_BOUND ( - 10000 - 10000 )']
+params = ['BB_INPUT_TYPE (C R C R)','NEIGHBORS_EXE "$python ./neighbors.py"','BB_OUTPUT_TYPE EB EB OBJ','MAX_BB_EVAL 500','F_TARGET 0.0','LOWER_BOUND ( - 0.0 - 0.0 )','UPPER_BOUND ( 2 10000 - 10000 )']
 
 [ x_return , f_return , h_return, nb_evals , nb_iters ,  stopflag ] = PyNomad.optimize(bb,x0,lb,ub,params)
 print ('\n NOMAD outputs \n X_sol={} \n F_sol={} \n H_sol={} \n NB_evals={} \n NB_iters={} \n'.format(x_return,f_return,h_return,nb_evals,nb_iters))
