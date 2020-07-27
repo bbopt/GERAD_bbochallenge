@@ -1,7 +1,19 @@
 import PyNomad
 
-# This example of blackbox function is for a single process
-# The blackbox output must be put in the Eval_Point passed as argument
++# Test that uses both:
++#  - Block evaluations (Max of 8 at a time; see below for limitations)
++#  - Categorical variables.
++# Based on runTest_Cat.py and runTest_BlockEval.py.
++#
++# Limtations of block evaluations:
++# - In the present example, the extended poll function neighbors.py only
++# returns 2 points, so there is actually only 2 points to evaluate.
++# - In any case when using BLOCKS with NOMAD 3, searches that are
++# turned on by default should be turned off, because they generate only
++# one single point:
++# 'NM_SEARCH false'
++# 'SPECULATIVE_SEARCH false'
++# 'DISABLE MODELS'
 def bb(x, bb_out):
     dim = x.get_n()
     vmin = 10000
