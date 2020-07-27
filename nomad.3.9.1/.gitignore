@@ -1,0 +1,7 @@
+XCode/
+bin/
+builds/
+ext/sgtelib/build/
+lib/
+nbproject/
+*.gz
