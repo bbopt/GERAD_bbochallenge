@@ -1,0 +1,3 @@
+PyNomad.cpp
+*.so
+build/*
