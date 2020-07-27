@@ -12,8 +12,10 @@ def bb(x):
     t1 = int(x.get_coord(2))
     v1 = x.get_coord(3)
     
-    v[t0] = v0
-    v[t1] = v1
+    if (t0 <= 2):
+        v[t0] = v0
+    if (t1 <= 2):
+        v[t1] = v1
     
     if v0 < vmin:
         vmin = v0
