@@ -52,6 +52,7 @@ using namespace std;
 
 typedef int (*Callback)(void * apply, NOMAD::Eval_Point &sv, bool hasSgte , bool sgte_eval);
 typedef int (*CallbackL)(void * apply, std::list<NOMAD::Eval_Point *> &sv, bool hasSgte , bool sgte_eval);
+typedef int (*NeighborCallbackL)(void * apply, const NOMAD::Eval_Point &pt, std::list<NOMAD::Eval_Point> &nei);
 
 //Print Nomad general Information
 static void printPyNomadVersion()
@@ -131,6 +132,51 @@ static void printNomadHelp(string about )
     p.help ( about );
 }
 
+class pyExtended_Poll : public NOMAD::Extended_Poll
+{
+private:
+    NeighborCallbackL NcbL;
+    void * apply;
+    
+public:
+    pyExtended_Poll(NOMAD::Parameters &p, NeighborCallbackL _NcbL, void * _apply) : NcbL(_NcbL), apply(_apply), NOMAD::Extended_Poll ( p){}
+    
+    virtual ~pyExtended_Poll(void){}
+    
+    // construct the extended poll points:
+    virtual void construct_extended_points ( const NOMAD::Eval_Point & x )
+    {
+        NOMAD::Signature * s = x.get_signature();
+        
+        std::list<NOMAD::Eval_Point> list_x;
+        
+        //Call Python neighbor function on an Eval_Point, returns a list of Eval_Points
+        try
+        {
+            bool success = NcbL(apply,x,list_x);
+            if ( success == -1 )
+            {
+                printf("Unrecoverable Error from Neighbors Callback, Exiting NOMAD...\n\n");
+                //Force exit
+                raise(SIGINT);
+                return;
+            }
+            
+            std::list<NOMAD::Eval_Point>::iterator itE;
+            for (itE=list_x.begin(); itE!=list_x.end(); ++itE)
+                add_extended_poll_point ( *itE , *s );
+        }
+        //Note if these errors occur it is due to errors in python code
+        catch(...)
+        {
+            printf("Unrecoverable Error from Neighbors Callback, Exiting NOMAD...\n\n");
+            //Force exit
+            raise(SIGINT);
+        }
+    }
+    
+};
+
 
 //Python Evaluator Class
 class pyEval : public NOMAD::Evaluator
@@ -183,7 +229,7 @@ public:
             return false;
     }
     
-    bool eval_x ( std::list<NOMAD::Eval_Point *>	&list_x  ,
+    bool eval_x ( std::list<NOMAD::Eval_Point *>	& list_x  ,
                  const NOMAD::Double				& h_max,
                  std::list<bool>					& list_count_eval ) const
     {
@@ -325,6 +371,7 @@ static int runNomad(Callback cb, CallbackL cbL, void * apply, std::vector<double
         
         p.check();
         
+    
         nobj = p.get_nb_obj();
         
         if ( nobj != 1 )
@@ -349,32 +396,49 @@ static int runNomad(Callback cb, CallbackL cbL, void * apply, std::vector<double
     {
         pyEval *mSEval = new pyEval(p,cb,cbL,apply);
         
-        NOMAD::Mads mads (p, mSEval);
         
-        NOMAD::stop_type stopflag = mads.run();
         
-        nb_evals = mads.get_stats().get_bb_eval();
-        nb_iters = mads.get_stats().get_iterations();
+        NOMAD::Mads *mads;
+        
+        if (p.get_signature()->has_categorical())
+        {
+            NeighborCallbackL NcbL;
+            
+            // extended poll:
+            pyExtended_Poll ep ( p , NcbL , apply);
+            
+            mads = new NOMAD::Mads(p, mSEval, &ep, NULL, NULL);
+            
+        }
+        else
+        {
+            mads = new NOMAD::Mads (p, mSEval);
+        }
+        
+        NOMAD::stop_type stopflag = mads->run();
+        
+        nb_evals = mads->get_stats().get_bb_eval();
+        nb_iters = mads->get_stats().get_iterations();
         
         // Set the best feasible solution or the best infeasible solution.
         // One of the pointer is set to null to identify the type of solution
-        const NOMAD::Eval_Point * bf = mads.get_best_feasible();
-        const NOMAD::Eval_Point *bimv = mads.get_best_infeasible_min_viol();
+        const NOMAD::Eval_Point * bf = mads->get_best_feasible();
+        const NOMAD::Eval_Point *bimv = mads->get_best_infeasible_min_viol();
         if ( bimv )
         {
             best_infeas_sol->set_f( bimv->get_f());
             best_infeas_sol->set_h( bimv->get_h());
-            best_infeas_sol->set( *bimv ,static_cast<int>(nobj)); 
+            best_infeas_sol->set( *bimv ,static_cast<int>(nobj));
             if ( !bf )
             {
                 delete best_feas_sol;
-                best_feas_sol = NULL; 
+                best_feas_sol = NULL;
             }
         }
         if ( bf )
         {
             best_feas_sol->set_f(bf->get_f());
-            best_feas_sol->set( *bf ,static_cast<int>(nobj));  	
+            best_feas_sol->set( *bf ,static_cast<int>(nobj));
             delete best_infeas_sol;
             best_infeas_sol = NULL;
         }
@@ -388,3 +452,4 @@ static int runNomad(Callback cb, CallbackL cbL, void * apply, std::vector<double
     return -1; 
     
 }
+
