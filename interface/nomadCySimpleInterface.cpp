@@ -52,7 +52,7 @@ using namespace std;
 
 typedef int (*Callback)(void * apply, NOMAD::Eval_Point &sv, bool hasSgte , bool sgte_eval);
 typedef int (*CallbackL)(void * apply, std::list<NOMAD::Eval_Point *> &sv, bool hasSgte , bool sgte_eval);
-typedef int (*NeighborCallbackL)(void * apply, const NOMAD::Eval_Point &pt, std::list<NOMAD::Eval_Point> &nei);
+typedef int (*NeighborCallbackL)(void * apply, NOMAD::Eval_Point &pt, std::list<NOMAD::Eval_Point> &nei);
 
 //Print Nomad general Information
 static void printPyNomadVersion()
@@ -153,7 +153,8 @@ public:
         //Call Python neighbor function on an Eval_Point, returns a list of Eval_Points
         try
         {
-            bool success = NcbL(apply,x,list_x);
+            NOMAD::Eval_Point xmodif(x); // Copy x because it is const and I don't kwnow how to handle that in the PyNomad.pyx
+            bool success = NcbL(apply,xmodif,list_x);
             if ( success == -1 )
             {
                 printf("Unrecoverable Error from Neighbors Callback, Exiting NOMAD...\n\n");
@@ -276,7 +277,7 @@ public:
 };
 
 
-static int runNomad(Callback cb, CallbackL cbL, void * apply, std::vector<double> X0 , std::vector<double> LB, std::vector<double> UB , const std::vector<std::string> & param , NOMAD::Eval_Point *& best_feas_sol , NOMAD::Eval_Point *& best_infeas_sol , int & nb_evals, int & nb_iters )
+static int runNomad(Callback cb, CallbackL cbL, NeighborCallbackL NcbL, void * apply, std::vector<double> X0 , std::vector<double> LB, std::vector<double> UB , const std::vector<std::string> & param , NOMAD::Eval_Point *& best_feas_sol , NOMAD::Eval_Point *& best_infeas_sol , int & nb_evals, int & nb_iters )
 {
     
     NOMAD::Display out(std::cout);
@@ -396,18 +397,16 @@ static int runNomad(Callback cb, CallbackL cbL, void * apply, std::vector<double
     {
         pyEval *mSEval = new pyEval(p,cb,cbL,apply);
         
-        
+        pyExtended_Poll *mExtendedPoll = nullptr;
         
         NOMAD::Mads *mads;
         
         if (p.get_signature()->has_categorical())
         {
-            NeighborCallbackL NcbL;
-            
             // extended poll:
-            pyExtended_Poll ep ( p , NcbL , apply);
+            mExtendedPoll = new pyExtended_Poll( p , NcbL , apply);
             
-            mads = new NOMAD::Mads(p, mSEval, &ep, NULL, NULL);
+            mads = new NOMAD::Mads(p, mSEval, mExtendedPoll, NULL, NULL);
             
         }
         else
@@ -416,6 +415,10 @@ static int runNomad(Callback cb, CallbackL cbL, void * apply, std::vector<double
         }
         
         NOMAD::stop_type stopflag = mads->run();
+        
+        
+        delete mSEval;
+        delete mExtendedPoll;
         
         nb_evals = mads->get_stats().get_bb_eval();
         nb_iters = mads->get_stats().get_iterations();

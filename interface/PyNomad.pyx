@@ -44,7 +44,7 @@ def optimize(f , pX0, pLB,pUB ,params):
     cdef int nb_params = len(params)
     for i in range(nb_params):
          params[i] = params[i].encode(u"ascii")
-    run_status = runNomad(cb, cbL, <void*> f, <vector[double]&> pX0, <vector[double]&> pLB, <vector[double]&> pUB , <vector[string]&> params , u_feas.c_ep ,u_infeas.c_ep , nb_evals, nb_iters)
+    run_status = runNomad(cb, cbL, NcbL, <void*> f, <vector[double]&> pX0, <vector[double]&> pLB, <vector[double]&> pUB , <vector[string]&> params , u_feas.c_ep ,u_infeas.c_ep , nb_evals, nb_iters)
     if u_feas.c_ep != NULL:
          f_return = u_feas.get_f()
          h_return = 0
@@ -117,11 +117,12 @@ cdef class PyNomadEval_Point:
 cdef extern from "nomadCySimpleInterface.cpp":
     ctypedef int (*Callback)(void * apply, Eval_Point& x,bool hasSgte , bool sgte_eval)
     ctypedef int (*CallbackL)(void * apply, list[Eval_Point *] & x,bool hasSgte , bool sgte_eval)
+    ctypedef int (*NeighborCallbackL)(void * apply, Eval_Point& x, list[Eval_Point] & x)
     void printPyNomadInfo()
     void printPyNomadUsage()
     void printNomadHelp( string about)
     void printPyNomadVersion()
-    int runNomad(Callback cb, CallbackL cbL, void* apply, vector[double] &X0, vector[double] &LB, vector[double] &UB , vector[string] & params , Eval_Point *& best_feas_sol ,Eval_Point *& best_infeas_sol , int & nb_evals, int & nb_iters) except+
+    int runNomad(Callback cb, CallbackL cbL, NeighborCallbackL cbL, void* apply, vector[double] &X0, vector[double] &LB, vector[double] &UB , vector[string] & params , Eval_Point *& best_feas_sol ,Eval_Point *& best_infeas_sol , int & nb_evals, int & nb_iters) except+
 
 # Define callback function for a single Eval_Point ---> link with Python     
 cdef int cb(void *f, Eval_Point & x, bool hasSgte , bool sgte_eval ):
@@ -174,3 +175,27 @@ cdef int cbL(void *f, list[Eval_Point *] & x, bool hasSgte , bool sgte_eval ):
    
       return 1   # 1 is success
  
+
+# Define callback function for block evaluation of a list of Eval_Points ---> link with Python
+cdef int NcbL(void *f, Eval_Point & xbase, list[Eval_Point] & xneig ):
+      #cdef size_t size = x.size()
+      cdef PyNomadEval_Point u = PyNomadEval_Point()
+      u.c_ep = &xbase
+
+      (<object>f)(u)
+
+
+      # Update the Eval_Points bb_output from the out Queue
+      #it = xneig.begin()
+      #for i in xrange(size):
+      #    c_ep = deref(it)
+      #    bb_out = out.get()
+      #    if type(bb_out) != type(float) or type(bb_out) != type(int):
+      #        for j in xrange(len(bb_out)):
+      #            c_ep.set_bb_output(j,bb_out[j])
+      #    else:
+      #        c_ep.set_bb_output(0,bb_out)
+
+      #    inc(it)
+
+      return 1   # 1 is success
