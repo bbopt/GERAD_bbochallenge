@@ -4,24 +4,27 @@
 {
     "distutils": {
         "depends": [
-            "C:\\Users\\Edward\\Desktop\\E20\\GERAD_bbochallenge\\nomad.3.9.1\\src\\Double.hpp",
-            "C:\\Users\\Edward\\Desktop\\E20\\GERAD_bbochallenge\\nomad.3.9.1\\src\\Eval_Point.hpp",
+            "/mnt/c/Users/Edward/Desktop/E20/GERAD_bbochallenge/nomad.3.9.1/src/Double.hpp",
+            "/mnt/c/Users/Edward/Desktop/E20/GERAD_bbochallenge/nomad.3.9.1/src/Eval_Point.hpp",
             "nomadCySimpleInterface.cpp"
         ],
         "extra_compile_args": [
             "-w"
         ],
+        "extra_link_args": [
+            "-Wl,-rpath,/mnt/c/Users/Edward/Desktop/E20/GERAD_bbochallenge/nomad.3.9.1/lib"
+        ],
         "include_dirs": [
-            "C:\\Users\\Edward\\Desktop\\E20\\GERAD_bbochallenge/nomad.3.9.1/src",
-            "C:\\Users\\Edward\\Desktop\\E20\\GERAD_bbochallenge/nomad.3.9.1/ext/sgtelib/src",
-            "C:\\Users\\Edward\\AppData\\Local\\Programs\\Python\\Python38-32\\lib\\site-packages\\numpy\\core\\include"
+            "/mnt/c/Users/Edward/Desktop/E20/GERAD_bbochallenge/nomad.3.9.1/src",
+            "/mnt/c/Users/Edward/Desktop/E20/GERAD_bbochallenge/nomad.3.9.1/ext/sgtelib/src",
+            "/usr/local/lib/python3.8/dist-packages/numpy/core/include"
         ],
         "language": "c++",
         "libraries": [
             "nomad"
         ],
         "library_dirs": [
-            "C:\\Users\\Edward\\Desktop\\E20\\GERAD_bbochallenge/nomad.3.9.1/bin"
+            "/mnt/c/Users/Edward/Desktop/E20/GERAD_bbochallenge/nomad.3.9.1/lib"
         ],
         "name": "PyNomad",
         "sources": [
