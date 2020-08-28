@@ -12,7 +12,7 @@ import sys
 # The first argument x is similar to a NOMAD::Eval_Point --> access the coordinates with get_coord() function
 # The blackbox output must be put in the second argument bb_out and the bb outputs must be put in the same order as defined in params
 # bb_out is a queue to work in a multiprocess.
-def bb(x,bb_out):
+def bb(x,bb_out, id_t):
     try:
         dim = x.get_n()
         out = [ x.get_coord(4) ]
@@ -20,7 +20,7 @@ def bb(x,bb_out):
         out.append(g1)
         g2 = 25-sum([(x.get_coord(i)+1)**2 for i in range(dim)])
         out.append(g2)
-        bb_out.put(out)
+        bb_out.put((id_t, out))
     except:
         print ("Unexpected error in bb()", sys.exc_info()[0])
         return -1

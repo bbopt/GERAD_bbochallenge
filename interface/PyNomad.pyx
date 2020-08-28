@@ -7,7 +7,9 @@ from libcpp.list cimport list
 from libcpp cimport bool
 
 from cython.operator cimport dereference as deref, preincrement as inc
-from multiprocessing import Process, Queue
+#  from multiprocessing import Process, Queue
+import threading
+import queue
 
 def version():
     printPyNomadVersion()
@@ -141,16 +143,21 @@ cdef int cbL(void *f, list[Eval_Point *] & x, bool hasSgte , bool sgte_eval ):
       cdef Eval_Point *c_ep
       
       # Start the process for each Eval_Point of the list
-      out = Queue()
+      #  out = queue.Queue()
+      out = queue.PriorityQueue()
+      #  print(size)
       for i in xrange(size):
          u = PyNomadEval_Point()
          c_ep = deref(it)
          u.c_ep = c_ep
          proc = []
          if ( hasSgte ):
-             p = Process(target=<object>f, args=(u,out,sgte_eval,)) # u is copied
+             #  p = Process(target=<object>f, args=(u,out,sgte_eval,)) # u is copied
+
+             p = threading.Thread(target=<object>f, args=(u,out, i, sgte_eval,)) # u is copied
          else:
-              p = Process(target=<object>f, args=(u,out,)) # u is copied
+              #  p = Process(target=<object>f, args=(u,out,)) # u is copied
+              p = threading.Thread(target=<object>f, args=(u,out,i, )) # u is copied
          p.start()
          proc.append(p)
          inc(it)
@@ -164,11 +171,13 @@ cdef int cbL(void *f, list[Eval_Point *] & x, bool hasSgte , bool sgte_eval ):
       for i in xrange(size):
           c_ep = deref(it)
           bb_out = out.get()
+          #  print(bb_out[0])
+          out.task_done()
           if type(bb_out) != type(float) or type(bb_out) != type(int):
               for j in xrange(len(bb_out)):
-                  c_ep.set_bb_output(j,bb_out[j])
+                  c_ep.set_bb_output(j,bb_out[1][j])
           else:
-              c_ep.set_bb_output(0,bb_out)
+              c_ep.set_bb_output(0,bb_out[1])
                           
           inc(it)  
    
