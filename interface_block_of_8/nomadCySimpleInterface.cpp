@@ -131,6 +131,10 @@ static void printNomadHelp(string about )
     p.help ( about );
 }
 
+static void printEvalPoint(const NOMAD::Eval_Point & ep)
+{
+    cout << ep << endl;
+}
 
 //Python Evaluator Class
 class pyEval : public NOMAD::Evaluator
@@ -245,6 +249,7 @@ static int runNomad(Callback cb, CallbackL cbL, void * apply, std::vector<double
         size_t ndec = X0.size();	
         if ( ndec != 0 )
         {
+            
             NOMAD::Point px0(ndec);
             
             dimension = (int)ndec;
@@ -254,7 +259,7 @@ static int runNomad(Callback cb, CallbackL cbL, void * apply, std::vector<double
                 px0[i] = X0[i];
             
             p.set_X0(px0); 
-        }  
+        }
         
         size_t nlb = LB.size();	
         if ( nlb != 0 )
