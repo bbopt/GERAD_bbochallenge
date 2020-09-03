@@ -8,6 +8,9 @@ import queue
 from bayesmark.abstract_optimizer import AbstractOptimizer
 from bayesmark.experiment import experiment_main
 
+# Sklearn prefers str to unicode:
+DTYPE_MAP = {"real": float, "int": int, "bool": bool, "cat": str, "ordinal": str}
+
 class PyNomadOptimizer(AbstractOptimizer):
 
     primary_import = "PyNomad"
@@ -32,7 +35,7 @@ class PyNomadOptimizer(AbstractOptimizer):
         # and their types
         params = [main_params[0], main_params[1], main_params[2],
                   'BB_OUTPUT_TYPE OBJ',
-                  'MAX_BB_EVAL ' + str(8 * 14),
+                  'MAX_BB_EVAL ' + str(8 * 16),
                   'BB_MAX_BLOCK_SIZE 8',
                   'MODEL_SEARCH SGTELIB',
                   'SGTELIB_MODEL_CANDIDATES_NB 8',
@@ -43,6 +46,16 @@ class PyNomadOptimizer(AbstractOptimizer):
                   'LH_SEARCH 8 0',
                   'OPPORTUNISTIC_EVAL false',
                   'NM_SEARCH false'] #,'PERIODIC_VARIABLE 0'] 
+
+        # deal with categorical variables
+        if len(main_params[3]) > 0:
+            instruction = 'PERIODIC_VARIABLE '
+            for var_index in main_params[3]:
+                instruction += str(var_index) + ' '
+            params.append(instruction)
+
+        self.round_to_values = main_params[4]
+
         x0 = [] # TODO choose x0 or LHS with n_initial_points
 
         # TODO analyze the types of the inputs to fill at maximum nomad bb blocks
@@ -76,6 +89,11 @@ class PyNomadOptimizer(AbstractOptimizer):
         bb_lower_bound_string = 'LOWER_BOUND ('
         bb_upper_bound_string = 'UPPER_BOUND ('
 
+        periodic_var_indexes = list()
+        counter_periodic_vars = 0
+
+        round_to_values = {}
+
         for param_name in param_list:
             param_config = api_config[param_name]
             param_type = param_config["type"]
@@ -84,31 +102,32 @@ class PyNomadOptimizer(AbstractOptimizer):
             param_range = param_config.get("range", None)
             param_values = param_config.get("values", None)
 
-            #  # some setup for cardinality or ordinality variables
-            #  # TODO : is there a special thing to do ? Do not understand this line
-            #  values_only_type = param_type in ("cat", "ordinal")
-            #  if (param_values is not None) and (not values_only_type):
-            #      assert param_range is None
-            #      param_values = np.unique(param_values)
-            #      param_range = (param_values[0], param_values[-1])
-            #      round_to_values[param_name] = interp1d(
-            #          param_values, param_values, kind="nearest", fill_value="extrapolate"
-            #      )
+            # some parameters can be real or integer and take a finite set of values
+            # TODO : how to deal with them
+            values_only_type = param_type in ("cat", "ordinal")
+            if (param_values is not None) and (not values_only_type):
+                assert param_range is None
+                param_values = np.unique(param_values)
+                param_range = (param_values[0], param_values[-1])
+                round_to_values[param_name] = interp1d(
+                    param_values, param_values, kind="nearest", fill_value="extrapolate"
+                )
 
             if param_type == "int":
                 bb_input_type_string += 'I '
                 bb_lower_bound_string += ' ' + str(param_range[0])
                 bb_upper_bound_string += ' ' + str(param_range[-1])
             elif param_type == "bool":
-                # TODO: how nomad deals with boolean variables ? Will have to change lower and upper bounds values
                 bb_input_type_string += 'B '
-                bb_lower_bound_string += ' 0'
-                bb_upper_bound_string += ' 1'
+                bb_lower_bound_string += ' -'
+                bb_upper_bound_string += ' -' # automatic bounds for boolean variables
             elif param_type in ("cat", "ordinal"):
+                # the variables will be considered as integer periodic variables
                 assert param_range is None
-                bb_input_type_string += 'C '
-                bb_lower_bound_string += ' -' # TODO at this time no upper bound neither lower bound; must be put
-                bb_upper_bound_string += ' -'
+                bb_input_type_string += 'I '
+                bb_lower_bound_string += ' 0'
+                bb_upper_bound_string += ' ' + str(len(param_values) - 1)
+                periodic_var_indexes.append(counter_periodic_vars)
             elif param_type == "real":
                 # TODO: will we have to deal with with type of space (log, logit) ?
                 bb_input_type_string += 'R '
@@ -117,11 +136,13 @@ class PyNomadOptimizer(AbstractOptimizer):
             else:
                 assert False, "type %s not handled in API" % param_type
 
+            counter_periodic_vars += 1
+
         bb_input_type_string += ')'
         bb_lower_bound_string += ')'
         bb_upper_bound_string += ')'
 
-        return bb_input_type_string, bb_lower_bound_string, bb_upper_bound_string
+        return bb_input_type_string, bb_lower_bound_string, bb_upper_bound_string, periodic_var_indexes, round_to_values
 
     def bb_fct(self, x):
         try:
@@ -175,6 +196,7 @@ class PyNomadOptimizer(AbstractOptimizer):
             function. Each suggestion is a dictionary where each key
             corresponds to a parameter being optimized.
         """
+        # clear candidates before a new suggestion
         self.stored_candidates.clear()
 
         # wait until Nomad gives candidates
@@ -189,15 +211,35 @@ class PyNomadOptimizer(AbstractOptimizer):
 
         # put them in the framework model
         param_list = sorted(self.api_config.keys())
+
         next_guess = list()
         for candidate in candidates:
             guess = dict()
 
-            # TODO add a correspondance for categorical variables/ordinal
             for (param_name, val) in zip(param_list, candidate):
-                guess[param_name] = val
+
+                param_config = api_config[param_name]
+                param_type = param_config["type"]
+
+                param_space = param_config.get("space", None)
+                param_range = param_config.get("range", None)
+                param_values = param_config.get("values", None)
+
+                # make correspondance between periodic variables and categorical
+                if param_type in ("cat", "ordinal"):
+                    guess[param_name] = param_values[val]
+                else:
+                    guess[param_name] = val
+
+            # round problematic variables
+            for param_name, round_f in self.round_to_values.items():
+                guess[param_name] = round_f(guess[param_name])
+
+            # Also ensure this is correct dtype so sklearn is happy (according to hyperopt)
+            guess = {k: DTYPE_MAP[self.api_config[k]["type"]](guess[k]) for k in guess}
 
             next_guess.append(guess)
+
 
             self.stored_candidates.append(guess)
 
@@ -205,12 +247,9 @@ class PyNomadOptimizer(AbstractOptimizer):
         self.inputs_queue.task_done()
 
         # sometimes, the block is not filled: we have to complete it
+        # for the moment, by repetition of the stored candidates
         for i in range(8 - len(candidates)):
-            guess = dict()
-
-            # TODO add a correspondance for categorical/ordinal variables
-            for (param_name, val) in zip(param_list, candidates[i]):
-                guess[param_name] = val
+            guess = copy(self.stored_candidates[i])
 
             next_guess.append(guess)
 
