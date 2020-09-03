@@ -5,8 +5,7 @@ import subprocess
 path = os.getcwd()
 path_nomad = path + '/nomad.3.9.1'
 os.chdir(path_nomad)
-os.environ['NOMAD_HOME'] = path_nomad  # TODO : fix pathing problem
-#os.environ['NOMAD_HOME'] = path_nomad+'//bin'  # manual fix
+os.environ['NOMAD_HOME'] = path_nomad
 
 # Run shell script configure and make
 with open('configure', 'r') as file:
