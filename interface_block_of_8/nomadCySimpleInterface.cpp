@@ -127,13 +127,13 @@ static void printPyNomadUsage()
 static void printNomadHelp(string about )
 {
     
-    NOMAD::Parameters p ( cout );
+    NOMAD::Parameters p ( std::cout );
     p.help ( about );
 }
 
 static void printEvalPoint(const NOMAD::Eval_Point & ep)
 {
-    cout << ep << endl;
+    std::cout << ep << std::endl;
 }
 
 //Python Evaluator Class

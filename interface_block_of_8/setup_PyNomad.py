@@ -6,6 +6,12 @@ import os
 import sys
 import glob
 
+
+PACKAGE_NAME = 'PyNomad'
+VERSION = '0.0.1'
+DESCRIPTION = 'A Cython wrapper to the NOMAD optimization package'
+DEPENDENCIES = ['numpy', 'cython', 'setuptools']
+
 if sys.platform.startswith('win'):
     if ( str(os.environ.get('NOMAD_HOME_PERSONAL')) == '' or str(os.environ.get('NOMAD_HOME_PERSONAL')) == 'None'):
         print ("A NOMAD_HOME_PERSONAL environment variable is needed for building Nomad for Python (PyNomad) \n")
@@ -40,15 +46,20 @@ if sys.platform == 'darwin':
      os.environ['CXX'] = "g++"    
 
 setup(
-	ext_modules = cythonize(Extension(
-           "PyNomad",                                # the extension name
-           sources=["PyNomad.pyx", "nomadCySimpleInterface.cpp"], # the Cython source and
-	       include_dirs=[ os_include_dirs1 , os_include_dirs2, os_include_dirs3 ],		   #[str(os.environ.get('NOMAD_HOME_PERSONAL'))+'/src',str(os.environ.get('NOMAD_HOME_PERSONAL'))+'/ext/sgtelib/src', np.get_include()],
-           extra_compile_args=compile_args,
-           extra_link_args=link_args,
-           language = 'c++',
-           libraries = ['nomad'],
-           library_dirs= [ os_library_dirs ] ))
+    name=PACKAGE_NAME,
+    version=VERSION,
+    description=DESCRIPTION,
+    package=[PACKAGE_NAME],
+    install_requires=DEPENDENCIES,
+    ext_modules = cythonize(Extension(
+        "PyNomad",                                # the extension name
+        sources=["PyNomad.pyx", "nomadCySimpleInterface.cpp"], # the Cython source and
+        include_dirs=[ os_include_dirs1 , os_include_dirs2, os_include_dirs3 ],		   #[str(os.environ.get('NOMAD_HOME_PERSONAL'))+'/src',str(os.environ.get('NOMAD_HOME_PERSONAL'))+'/ext/sgtelib/src', np.get_include()],
+        extra_compile_args=compile_args,
+        extra_link_args=link_args,
+        language = 'c++',
+        libraries = ['nomad'],
+        library_dirs= [ os_library_dirs ] ))
 )
 
 

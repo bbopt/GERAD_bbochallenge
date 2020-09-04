@@ -25,19 +25,19 @@ def bb(x):
 
         nbPts = nbVal//dimPb
 
-        print ("----------------- Block eval (",nbPts,") ------------------")
+        #  print ("----------------- Block eval (",nbPts,") ------------------")
         for i in range(nbPts):
             # Rosenbrock
             f = sum([(100*((x.get_coord(j) ** 2 - x.get_coord(j+1)) ** 2 ) + (x.get_coord(j)-1) ** 2 )  for j in range(i*dimPb,(i+1)*dimPb-1)])
             x.set_bb_output(i, f)
-            for j in range(i*dimPb,(i+1)*dimPb):
-                print(x.get_coord(j),end=" ")
-            print("=> f=",f)
+            #  for j in range(i*dimPb,(i+1)*dimPb):
+                #  print(x.get_coord(j),end=" ")
+            #  print("=> f=",f)
 
     except:
         print ("Unexpected error in bb()", sys.exc_info()[0])
         return -1
-    return 1 
+    return 1
 
 
 
