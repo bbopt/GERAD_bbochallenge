@@ -2,8 +2,10 @@ import numpy as np
 from scipy.interpolate import interp1d
 from PyNomad import optimize as nomad_solve
 
-import threading
-import queue
+#  import threading
+#  import queue
+import multiprocessing
+
 
 from bayesmark.abstract_optimizer import AbstractOptimizer
 from bayesmark.experiment import experiment_main
@@ -13,7 +15,7 @@ DTYPE_MAP = {"real": float, "int": int, "bool": bool, "cat": str, "ordinal": str
 
 class PyNomadOptimizer(AbstractOptimizer):
 
-    primary_import = "PyNomad"
+    primary_import = None#"PyNomad"
 
     def __init__(self, api_config, n_initial_points=0):
         """Build wrapper class to use an optimizer in benchmark
@@ -33,7 +35,7 @@ class PyNomadOptimizer(AbstractOptimizer):
 
         # NB these params will have to be tuned according to the number of variables,
         # and their types
-        params = [main_params[0], main_params[1], main_params[2],
+        params = [main_params[0], #main_params[1], main_params[2],
                   'BB_OUTPUT_TYPE OBJ',
                   'MAX_BB_EVAL ' + str(8 * 16),
                   'BB_MAX_BLOCK_SIZE 8',
@@ -56,21 +58,31 @@ class PyNomadOptimizer(AbstractOptimizer):
 
         self.round_to_values = main_params[4]
 
+        # lower and upper bounds are given
+        lb = main_params[1]
+        ub = main_params[2]
+
         x0 = [] # TODO choose x0 or LHS with n_initial_points
 
         # TODO analyze the types of the inputs to fill at maximum nomad bb blocks
 
         # queues to communicate between threads
-        self.inputs_queue = queue()
+        #  self.inputs_queue = queue.Queue()
+        #  self.outputs_queue = queue.Queue()
+        self.inputs_queue = multiprocessing.JoinableQueue()
+        self.outputs_queue = multiprocessing.JoinableQueue()
 
-        self.outputs_queue = queue()
+        # counter to deal with number of iterations: needed to properly kill the daemon thread
+        self.n_iters = 0
 
         # list to keep candidates for an evaluation
         self.stored_candidates = list()
 
         # start background thread
-        self.nomad_thread = threading.Thread(target=nomad_solve, args=(self.bb_fct, x0, params,), daemon=True)
-        self.nomad_thread.start()
+        #  self.nomad_thread = threading.Thread(target=nomad_solve, args=(self.bb_fct, x0, lb, ub, params,), daemon=True)
+        #  self.nomad_thread.start()
+        self.nomad_process = multiprocessing.Process(target=nomad_solve, args=(self.bb_fct, x0, lb, ub, params,))
+        self.nomad_process.start()
 
 
     @staticmethod
@@ -85,9 +97,12 @@ class PyNomadOptimizer(AbstractOptimizer):
         # just in case we do it
         param_list = sorted(api_config.keys())
 
-        bb_input_type_string = 'BB_INPUT_TYPE ('
-        bb_lower_bound_string = 'LOWER_BOUND ('
-        bb_upper_bound_string = 'UPPER_BOUND ('
+        bb_input_type_string = 'BB_INPUT_TYPE ( '
+        #  bb_lower_bound_string = 'LOWER_BOUND ('
+        #  bb_upper_bound_string = 'UPPER_BOUND ('
+        lb = []
+        ub = []
+        tol = 10**(-7)
 
         periodic_var_indexes = list()
         counter_periodic_vars = 0
@@ -115,34 +130,44 @@ class PyNomadOptimizer(AbstractOptimizer):
 
             if param_type == "int":
                 bb_input_type_string += 'I '
-                bb_lower_bound_string += ' ' + str(param_range[0])
-                bb_upper_bound_string += ' ' + str(param_range[-1])
+                #  bb_lower_bound_string += ' ' + str(param_range[0])
+                #  bb_upper_bound_string += ' ' + str(param_range[-1])
+                lb.append(param_range[0])
+                ub.append(param_range[-1])
             elif param_type == "bool":
                 bb_input_type_string += 'B '
-                bb_lower_bound_string += ' -'
-                bb_upper_bound_string += ' -' # automatic bounds for boolean variables
+                #  bb_lower_bound_string += ' -'
+                #  bb_upper_bound_string += ' -' # automatic bounds for boolean variables
+                lb.append(0)
+                ub.append(1)
             elif param_type in ("cat", "ordinal"):
                 # the variables will be considered as integer periodic variables
                 assert param_range is None
                 bb_input_type_string += 'I '
-                bb_lower_bound_string += ' 0'
-                bb_upper_bound_string += ' ' + str(len(param_values) - 1)
+                #  bb_lower_bound_string += ' 0'
+                #  bb_upper_bound_string += ' ' + str(len(param_values) - 1)
+                lb.append(0)
+                ub.append(len(param_values) - 1)
                 periodic_var_indexes.append(counter_periodic_vars)
             elif param_type == "real":
                 # TODO: will we have to deal with with type of space (log, logit) ?
                 bb_input_type_string += 'R '
-                bb_lower_bound_string += ' ' + str(param_range[0])
-                bb_upper_bound_string += ' ' + str(param_range[1])
+                # Nomad has a tendance to go the bounds and the blackbox does not appreciate that
+                lb.append(param_range[0] + tol)
+                ub.append(param_range[-1] - tol)
+                #  bb_lower_bound_string += ' ' + str(param_range[0])
+                #  bb_upper_bound_string += ' ' + str(param_range[1])
             else:
                 assert False, "type %s not handled in API" % param_type
 
             counter_periodic_vars += 1
 
         bb_input_type_string += ')'
-        bb_lower_bound_string += ')'
-        bb_upper_bound_string += ')'
+        #  bb_lower_bound_string += ' )'
+        #  bb_upper_bound_string += ' )'
 
-        return bb_input_type_string, bb_lower_bound_string, bb_upper_bound_string, periodic_var_indexes, round_to_values
+
+        return bb_input_type_string, lb, ub, periodic_var_indexes, round_to_values #bb_input_type_string, bb_lower_bound_string, bb_upper_bound_string, periodic_var_indexes, round_to_values
 
     def bb_fct(self, x):
         try:
@@ -153,13 +178,19 @@ class PyNomadOptimizer(AbstractOptimizer):
                 print("Invalid number of values passed to bb")
                 return -1
 
-            n_pts = n_vals // dim_pb
+            n_pts = n_values // dim_pb
+
+            print("Number of points:", n_pts)
 
             # store the input points
             candidates = []
             for i in range(n_pts):
-                candidates.append([x.get_coord(j) for j in range(i*dimPb,(i+1)*dimPb-1)])
+                candidates.append([x.get_coord(j) for j in range(i*dim_pb,(i+1)*dim_pb)])
+            #  print("candidates")
+            #  for candidate in candidates:
+            #      print(candidate)
             self.inputs_queue.put(candidates)
+            self.inputs_queue.join()
 
             # wait until the blackbox returns observations
             while self.outputs_queue.empty():
@@ -167,7 +198,7 @@ class PyNomadOptimizer(AbstractOptimizer):
 
             # returns observations to the blackbox
             outputs_candidates = self.outputs_queue.get()
-            for output_val in range(outputs_candidates):
+            for output_val in outputs_candidates:
                 x.set_bb_output(i, output_val)
 
             # task finish
@@ -218,7 +249,7 @@ class PyNomadOptimizer(AbstractOptimizer):
 
             for (param_name, val) in zip(param_list, candidate):
 
-                param_config = api_config[param_name]
+                param_config = self.api_config[param_name]
                 param_type = param_config["type"]
 
                 param_space = param_config.get("space", None)
@@ -240,7 +271,6 @@ class PyNomadOptimizer(AbstractOptimizer):
 
             next_guess.append(guess)
 
-
             self.stored_candidates.append(guess)
 
         # complete task
@@ -249,7 +279,7 @@ class PyNomadOptimizer(AbstractOptimizer):
         # sometimes, the block is not filled: we have to complete it
         # for the moment, by repetition of the stored candidates
         for i in range(8 - len(candidates)):
-            guess = copy(self.stored_candidates[i])
+            guess = (self.stored_candidates[0].copy())
 
             next_guess.append(guess)
 
@@ -268,7 +298,7 @@ class PyNomadOptimizer(AbstractOptimizer):
         y : array-like, shape (n,)
             Corresponding values where objective has been evaluated
         """
-        assert len(X) == len(y)
+        assert len(X) == len(y), "The length is not the same"
 
         outputs_candidates = list()
 
@@ -278,11 +308,22 @@ class PyNomadOptimizer(AbstractOptimizer):
             id_y = np.argwhere(idx)[0].item() # pick the first index
             outputs_candidates.append(y[id_y])
 
+        #  print(outputs_candidates)
+
         # trigger callbacks
-        if self.nomad_thread.is_alive()
+
+        if self.nomad_process.is_alive():
+        #  if self.nomad_thread.is_alive():
             self.outputs_queue.put(outputs_candidates)
             # wait for completion
             self.outputs_queue.join()
+            self.n_iters += 1
+            print("Observe Done!")
+
+        # kill thread if last iteration
+        if self.n_iters >= 16:
+            self.nomad_process.terminate()
+            self.nomad_process.join()
 
 
 if __name__ == "__main__":
