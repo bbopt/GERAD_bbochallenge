@@ -1,7 +1,7 @@
 
 ### THIS STRATEGY RETURNED A SCORE OF .... (complete when done)
 ### ORTHO MADS 2n or n+1, no quad models, no quad search, sgtelib search, no NM search, initial LH searche
-
+### We use ORTHO n+1 UNI (not quad) because it is the only ortho n+1 poll strategy that work on a single pass.
 
 import numpy as np
 from scipy.interpolate import interp1d
@@ -57,7 +57,7 @@ class PyNomadOptimizer(AbstractOptimizer):
 
 # Direction type and intensification for dimension 3 to 9
 #   dim       2n         n+1       strategy
-#     3        6           4       2n + intens. 4 => 8
+#     3        6           4       2n + intens. 2 => 8
 #     4        8           5       2n => 8
 #     5       10           6       n+1 + intens. 2 => 8
 #     6       12           7       n+1 + intens. 1 => 8
@@ -73,10 +73,7 @@ class PyNomadOptimizer(AbstractOptimizer):
             param.append('DIRECTION_TYPE ORTHO N+1 UNI')
 
         # Need for intensification for some direction type and dimension
-        if dimension == 3:
-            param.append('MAX_EVAL_INTENSIFICATION 4')
-
-        if dimension == 5:
+        if dimension == 3 or dimension == 5:
             param.append('MAX_EVAL_INTENSIFICATION 2')
     
         if dimension == 6:
