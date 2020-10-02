@@ -60,7 +60,7 @@ Final score `100 x (1-loss)` for leaderboard:
 optimizer
 nomadsolution_x.x.x_327a886    91.154079
 
-    - server benchmarks:
+    - server benchmarks: 87.098
 """
 import numpy as np
 from scipy.interpolate import interp1d
